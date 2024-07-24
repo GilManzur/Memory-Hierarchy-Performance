@@ -22,7 +22,7 @@ void main() {
     Cache* L2 = init_cache(L2_CACHE_SIZE ,L2_HIT_TIME);
     Cache* L3 = init_cache(L2_CACHE_SIZE ,L3_HIT_TIME);
 
-    programProccess("C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\fibonacci_val_filtered.trc" , L1, L2, L3);
+    programProccess("C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\dhrystone_val_filtered.trc" , L1, L2, L3);
 
 
 }
