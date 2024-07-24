@@ -7,7 +7,7 @@
 #define L1_CACHE_SIZE 16384      // 16KB
 #define L2_CACHE_SIZE 524288     // 512KB
 #define L3_CACHE_SIZE 2097152    // 2MB
-#define CACHE_LINE_SIZE 32       // 32bit
+#define CACHE_LINE_SIZE 4       // 4 bytes
 
 #define L1_ASSOCIATIVITY 1       // Direct mapped
 #define L2_ASSOCIATIVITY 1       // Direct mapped

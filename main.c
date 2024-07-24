@@ -18,11 +18,18 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3);
 
 
 void main() {
-    Cache* L1 = init_cache(L1_CACHE_SIZE ,L1_HIT_TIME);
-    Cache* L2 = init_cache(L2_CACHE_SIZE ,L2_HIT_TIME);
-    Cache* L3 = init_cache(L2_CACHE_SIZE ,L3_HIT_TIME);
+    char filesnames[4][512] = { "C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\coremark_val_filtered.trc" , "C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\dhrystone_val_filtered.trc","C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\fibonacci_val_filtered.trc", "C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\linpack_val_filtered.trc" };
 
-    programProccess("C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\dhrystone_val_filtered.trc" , L1, L2, L3);
+    Cache* L1;
+    Cache* L2;
+    Cache* L3;
+    for (int i = 0; i < 4; i++)
+    {
+        L1 = init_cache(L1_CACHE_SIZE, L1_HIT_TIME);
+        L2 = init_cache(L2_CACHE_SIZE, L2_HIT_TIME);
+        L3 = init_cache(L3_CACHE_SIZE, L3_HIT_TIME);
+        programProccess(filesnames[i], L1, L2, L3);
+    }
 
 
 }
@@ -59,9 +66,9 @@ Cache* init_cache(size_t size, int access) {
         return NULL;
     }
     cache->size = size;
-    cache->num_lines = size / CACHE_LINE_SIZE;
+    cache->num_lines = size / (4 * CACHE_LINE_SIZE);
     cache->access = access;
-    cache->offset_bits = (int)log2(CACHE_LINE_SIZE);
+    cache->offset_bits = 2;
     cache->index_bits = (int)log2(cache->num_lines);
     cache->tag_bits = 32 - cache->index_bits - cache->offset_bits;
     cache->hits = 0;
@@ -228,6 +235,7 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
         }
 
         address = search_address_by_name(addressList, var2) + num1;
+        //printf("%s %x --> tag = %x , index = %x \n",instruction,address,getTAG(L1,address), getINDEX(L1, address));
         int L1_state;
         int L2_state;
         int L3_state;
