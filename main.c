@@ -14,24 +14,25 @@ void free_cache(Cache* cache);
 int check_access_cache(Cache* cache, uint32_t address, int is_write);
 void access_cache(Cache* cache, uint32_t address,bool dirty);
 void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3);
+long int DRAMcost(uint32_t* openRow, uint32_t address, int numOfBanks, int* hits, int* misses);
 
 
 
 void main() {
     char filesnames[4][512] = { "C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\coremark_val_filtered.trc" , "C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\dhrystone_val_filtered.trc","C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\fibonacci_val_filtered.trc", "C:\\Users\\GilMa\\PycharmProjects\\Memory-Hierarchy-Performance\\linpack_val_filtered.trc" };
+    char names[4][512] = { "coremark_val_filtered.trc", "dhrystone_val_filtered.trc" , "fibonacci_val_filtered.trc", "linpack_val_filtered.trc" };
 
     Cache* L1;
     Cache* L2;
     Cache* L3;
     for (int i = 0; i < 4; i++)
     {
+        printf("\n %s :\n",names[i]);
         L1 = init_cache(L1_CACHE_SIZE, L1_HIT_TIME);
         L2 = init_cache(L2_CACHE_SIZE, L2_HIT_TIME);
         L3 = init_cache(L3_CACHE_SIZE, L3_HIT_TIME);
         programProccess(filesnames[i], L1, L2, L3);
     }
-
-
 }
 
 
@@ -66,7 +67,7 @@ Cache* init_cache(size_t size, int access) {
         return NULL;
     }
     cache->size = size;
-    cache->num_lines = size / (4 * CACHE_LINE_SIZE);
+    cache->num_lines = size / CACHE_LINE_SIZE;
     cache->access = access;
     cache->offset_bits = 2;
     cache->index_bits = (int)log2(cache->num_lines);
@@ -102,91 +103,41 @@ uint32_t getINDEX(Cache* cache, uint32_t address)
 }
 
 int check_access_cache(Cache* cache, uint32_t address, int is_write) {
-
-    uint32_t writeback_TAG = 0, writeback_INDEX = 0, writeback_OFFSET = 0;
-    CacheLine* writeback_LINE;
-
     uint32_t TAG = getTAG(cache, address);
     uint32_t INDEX = getINDEX(cache, address);
-    //uint32_t OFFSET = getOFFSET(cache, address);
-
-    /*uint64_t index = (address / CACHE_LINE_SIZE) % cache->num_lines;
-      uint64_t tag = address / cache->size;*/
     CacheLine* line = &cache->lines[INDEX];
 
-
-
-    // CACHE MISS LOGIC
+    // CACHE HIT/MISS LOGIC
     if (!line->valid) {
         // case the index is empty
         line->valid = true;
         line->tag = TAG;
         cache->miss += 1;
+        //printf("miss -> line is empty ");
         return -2;
     }
 
     if (line->valid && line->tag != TAG && line->dirty) {
         // line is dirty and need to save it in the lower level
         cache->miss += 1;
+        //printf("miss -> line is diffrent and dirty ");
         return 0;
     }
 
     if (line->valid && line->tag != TAG) {
         // case is valid and the tag is wrong miss and go to lower level
         cache->miss += 1;
+        //printf("miss - line is diffrent ");
         return -1;
     }
 
-
     if (line->valid && line->tag == TAG ) {
-        // case the index is valid and is the correct adress and "SW"
-        line->dirty = true;
+        // case the line is valid and the same tag
         cache->hits += 1;
+        //printf("hit same line ");
         return 1;
     }
-
-
-
-    //// CACHE MISS LOGIC
-    //// WRITE BACK
-
-    //if (line->valid && line->dirty && line->tag != TAG && is_write == 1) { //if .its./ a miss, but the line is valid and dirty ( there is some data, //butweneed .to .overwrite it with another data... )
-    //    // Write back if dirty
-    //    // This is simplified; in a real system, we would write //theblockto .the .next level cache or DRAM
-
-    //    if (level == 1)
-    //    {
-    //        uint32_t x = reconstructAddress(line->tag, //INDEX,L1>index_bits, .L1-.>offset_bits);
-    //        printf("restored address is: 0x%08x", x);
-
-    //        writeback_INDEX = getINDEX(L2, x);
-
-    //        writeback_LINE = &L2->lines[writeback_INDEX];
-
-    //        writeback_LINE->tag = line->tag;
-
-    //    }
-
-    //    if (level == 2)
-    //    {
-
-    //        writeback_INDEX = getINDEX(L3, reconstructAddress//(line>tag,INDEX, .L2-.>index_bits, L2->offset_bits));
-
-    //        writeback_LINE = &L3->lines[writeback_INDEX];
-
-    //        writeback_LINE->tag = line->tag;
-
-    //    }
-    //}
-
-
-    //line->valid = 1;
-    //line->tag = TAG;
-    //line->dirty = is_write;
-
-    //return -1; // Indicating a miss
-
-
+    printf("something is not good");
 }
 
 void access_cache(Cache* cache, uint32_t address,bool dirty) {
@@ -195,6 +146,7 @@ void access_cache(Cache* cache, uint32_t address,bool dirty) {
     cache->lines[INDEX].valid = true;
     cache->lines[INDEX].tag = TAG;
     cache->lines[INDEX].dirty = dirty;
+    //if(dirty) printf("set dirty");
 }
 
 void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
@@ -204,6 +156,20 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
         exit(1);
     }
     uint32_t address;
+    uint32_t openRow;
+    int L1_state;
+    int L2_state;
+    int L3_state;
+    int openRowHit = 0;
+    int openRowMiss = 0;
+    double L1_missrate;
+    double L2_missrate;
+    double L3_missrate;
+    double DRAM_missrate;
+    double L1_AMAT;
+    double RAS = RAS_TIME;
+    double CAS = CAS_TIME;
+    long int DRAMtime = 0;
     char line[256];
     char instruction[10];
     char var1[10], var2[10], var3[10];
@@ -214,8 +180,9 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
 
         if (strstr(line, "->")) { // if the line has -> in it, then update the values of each register
             sscanf(line, "%s %x -> %x", var1, &num1, &num2);
-
+            //printf("%s %8.x -> ", var1, num1);
             change_address_by_name(addressList, var1, num2); //there the registers values (Address) stored.
+            //printf("%x\n", search_address_by_name(addressList, var1));
             continue;
         }
 
@@ -235,47 +202,46 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
         }
 
         address = search_address_by_name(addressList, var2) + num1;
-        //printf("%s %x --> tag = %x , index = %x \n",instruction,address,getTAG(L1,address), getINDEX(L1, address));
-        int L1_state;
-        int L2_state;
-        int L3_state;
+        //printf("proccess %s %x --> tag = %x , index = %x \n",instruction,address,getTAG(L1,address), getINDEX(L1, address));
         uint32_t dirtyAddress = 0;
         // Simulate cache access
         L1_state = check_access_cache(L1, address, isWrite);
         switch (L1_state) {
         case  -2: //evry thing is empty L1 miss
-            // pay DRAM
+            DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
+            access_cache(L1, address, isWrite);
             access_cache(L2, address, false);
             L2->miss += 1;
             access_cache(L3, address, false);
             L3->miss += 1;
-            access_cache(L1, address, isWrite);
             break;
         case -1: //L1 miss
             L2_state = check_access_cache(L2, address, isWrite);
             switch (L2_state) {
             case -2: // L2 miss and line is empty
-                //pay DRAM
+                DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                 L3->miss += 1;
                 access_cache(L1, address, isWrite);
                 access_cache(L2, address, false);
                 access_cache(L3, address, false);
+                break;
             case -1: //miss check in L3
                 L3_state = check_access_cache(L3, address, isWrite);
                 switch (L3_state) {
                 case -2: // L3 miss line is empty
-                    //pay DRAM
+                    DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
+                    break;
                 case -1: // every cache got miss
-                    //pay DRAM
+                    DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
                     break;
                 case 0: //every cache got miss and L3 line is dirty
-                    //pay 2 DRAM
+                    DRAMtime += 2 * DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
@@ -286,7 +252,7 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
                     break;
-                }
+                } break;
             case 0: // L2 got miss and the line is dirty
                 L3_state = check_access_cache(L3, address, isWrite);
                 dirtyAddress = (L2->lines[getINDEX(L2, address)].tag << (L2->offset_bits + L2->index_bits)) | (getINDEX(L2, address) << L2->offset_bits);
@@ -294,19 +260,19 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
                 dirtyAddress = 0;
                 switch (L3_state) {
                 case -2: // L3 line is empty
-                    //pay DRAM
+                    DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
                     break;
                 case -1: // // every cache got miss
-                    //pay DRAM
+                    DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
                     break;
                 case 0: //L3 line is the same as L2
-                    //pay 2 DRAM
+                    DRAMtime += 2 * DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
@@ -316,7 +282,7 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
                     break;
-                }
+                } break;
             case 1: // L2 hit
                 access_cache(L1, address, isWrite);
                 access_cache(L2, address, false);
@@ -329,27 +295,29 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
             L2_state = check_access_cache(L2, address, isWrite);
             switch (L2_state) {
             case -2: // L2 miss and line is empty
-                //pay DRAM
+                DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                 L3->miss += 1;
                 access_cache(L1, address, isWrite);
                 access_cache(L2, address, false);
                 access_cache(L3, address, false);
+                break;
             case -1: //miss check in L3
                 L3_state = check_access_cache(L3, address, isWrite);
                 switch (L3_state) {
                 case -2: // L3 miss line is empty
-                    //pay DRAM
+                    DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
+                    break;
                 case -1: // every cache got miss
-                    //pay DRAM
+                    DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
                     break;
                 case 0: //every cache got miss and L3 line is dirty
-                    //pay 2 DRAM
+                    DRAMtime += 2 * DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
@@ -360,7 +328,7 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
                     break;
-                }
+                } break;
             case 0: // L2 got miss and the line is dirty
                 L3_state = check_access_cache(L3, address, isWrite);
                 dirtyAddress = (L2->lines[getINDEX(L2, address)].tag << (L2->offset_bits + L2->index_bits)) | (getINDEX(L2, address) << L2->offset_bits);
@@ -368,19 +336,19 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
                 dirtyAddress = 0;
                 switch (L3_state) {
                 case -2: // L3 line is empty
-                    //pay DRAM
+                    DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
                     break;
                 case -1: // // every cache got miss
-                    //pay DRAM
+                    DRAMtime += DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
                     break;
                 case 0: //L3 line is the same as L2
-                    //pay 2 DRAM
+                    DRAMtime += 2 * DRAMcost(&openRow, address, BANKS, &openRowHit, &openRowMiss);
                     access_cache(L1, address, isWrite);
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
@@ -390,28 +358,43 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
                     access_cache(L2, address, false);
                     access_cache(L3, address, false);
                     break;
-                }
+                } break;
             case 1: // L2 hit
                 access_cache(L1, address, isWrite);
+                L3->hits += 1;
                 break;
             }
             break;
         case 1: // L1 hit
             access_cache(L1, address, isWrite);
+            L2->hits += 1;
+            L3->hits += 1;
             break;
         }
     }
 
     fclose(file);
 
-    printf("Total memory accesses: %d\n", L1->miss + L1->hits + L2->miss + L2->hits + L3->miss + L3->hits);
-    printf("L1 cache hits: %d\n", L1->hits);
-    printf("L2 cache hits: %d\n", L2->hits);
-    printf("L3 cache hits: %d\n", L3->hits);
+    //printf("Total memory accesses: %d\n", L1->miss + L1->hits);
+    //printf("L1 cache hits: %d\n", L1->hits);
+    //printf("L1 cache misses: %d\n", L1->miss);
+    L1_missrate = (double)(L1->miss) / (L1->miss + L1->hits);
+    L2_missrate = (double)(L2->miss) / (L2->miss + L2->hits);
+    L3_missrate = (double)(L3->miss) / (L3->miss + L3->hits);
+    DRAM_missrate = (double)openRowMiss / (openRowMiss + openRowHit);
+    //printf("L1 miss rate : %f\n", L1_missrate);
+    L1_AMAT = L1->access + L1_missrate * (L2->access + L2_missrate * (L3->access + L3_missrate * (CAS + DRAM_missrate * (RAS + CAS))));
+    printf("L1 Avarage Memory Access Time is : %f\n", L1_AMAT);
+    //printf("L2 cache hits: %d\n", L2->hits);
+    //printf("L2 cache misses: %d\n", L2->miss);
+    //
+    ////L1_AMAT = L3->access + L3_missrate * (CAS + DRAM_missrate * (RAS + CAS));
+    //printf("L3 cache hits: %d\n", L3->hits);
+    //printf("L3 cache misses: %d\n", L3->miss);
+    ////printf("L3 miss rate: %f\n", L3_missrate);
+    ////printf("L3 Avarage Memory Access Time: %f\n", L1_AMAT);
 
-    printf("L1 cache misses: %d\n", L1->miss);
-    printf("L2 cache misses: %d\n", L2->miss);
-    printf("L3 cache misses: %d\n", L3->miss);
+    //printf("DRAM time spend: %d\n", DRAMtime);
 
     //printf("Average memory access time: %.2f\n", (float)(total_time + write_back_cost) /(L1_hits + L2_hits + L3_hits + L3_misses + L1_misses + L2_misses));
 
@@ -420,4 +403,20 @@ void programProccess(const char* filename, Cache* L1, Cache* L2, Cache* L3) {
     free_cache(L2);
     free_cache(L3);
 
+}
+
+long int DRAMcost(uint32_t *openRow,uint32_t address, int numOfBanks, int  *hits, int * misses) {
+    long int RAS = RAS_TIME;
+    long int CAS = CAS_TIME;
+    // calculate the row
+    uint32_t row = *openRow / (numOfBanks); // 4 bytes
+    uint32_t addressRow = address / (numOfBanks);
+    if (row == addressRow) {
+        *openRow = row * numOfBanks;
+        *hits += 1;
+        return  CAS;
+    }
+    *openRow = addressRow * numOfBanks;
+    *misses += 1;
+    return RAS + CAS;
 }
